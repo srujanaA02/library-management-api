@@ -299,6 +299,56 @@ def get_overdue_transactions(db: Session = Depends(get_db)):
         Transaction.due_date < now
     ).all()
 
+
+# Update Book
+@app.put("/books/{book_id}", response_model=BookResponse)
+def update_book(book_id: int, book: BookCreate, db: Session = Depends(get_db)):
+    db_book = db.query(Book).filter(Book.id == book_id).first()
+    if not db_book:
+        raise HTTPException(status_code=404, detail="Book not found")
+    db_book.isbn = book.isbn
+    db_book.title = book.title
+    db_book.author = book.author
+    db_book.category = book.category
+    db_book.total_copies = book.total_copies
+    db_book.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(db_book)
+    return db_book
+
+# Delete Book
+@app.delete("/books/{book_id}")
+def delete_book(book_id: int, db: Session = Depends(get_db)):
+    db_book = db.query(Book).filter(Book.id == book_id).first()
+    if not db_book:
+        raise HTTPException(status_code=404, detail="Book not found")
+    db.delete(db_book)
+    db.commit()
+    return {"message": "Book deleted successfully"}
+
+# Update Member
+@app.put("/members/{member_id}", response_model=MemberResponse)
+def update_member(member_id: int, member: MemberCreate, db: Session = Depends(get_db)):
+    db_member = db.query(Member).filter(Member.id == member_id).first()
+    if not db_member:
+        raise HTTPException(status_code=404, detail="Member not found")
+    db_member.name = member.name
+    db_member.email = member.email
+    db_member.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(db_member)
+    return db_member
+
+# Delete Member
+@app.delete("/members/{member_id}")
+def delete_member(member_id: int, db: Session = Depends(get_db)):
+    db_member = db.query(Member).filter(Member.id == member_id).first()
+    if not db_member:
+        raise HTTPException(status_code=404, detail="Member not found")
+    db.delete(db_member)
+    db.commit()
+    return {"message": "Member deleted successfully"}
+
 # Fine Endpoints
 @app.post("/fines/{fine_id}/pay", response_model=FineResponse)
 def pay_fine(fine_id: int, db: Session = Depends(get_db)):
