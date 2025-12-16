@@ -14,7 +14,7 @@ A RESTful API for managing library operations, including book borrowing, member 
 ## Tech Stack
 
 - **Backend**: FastAPI (Python)
-- **Database**: PostgreSQL
+- **Database**: SQLite (default) or PostgreSQL (optional)
 - **ORM**: SQLAlchemy
 - **Validation**: Pydantic
 
@@ -24,34 +24,10 @@ A RESTful API for managing library operations, including book borrowing, member 
 library-management-api/
 ├── app/
 │   ├── __init__.py
-│   ├── main.py                 # FastAPI application
-│   ├── config.py               # Configuration settings
-│   ├── database.py             # Database setup
-│   ├── models/
-│   │   ├── __init__.py
-│   │   ├── book.py             # Book model
-│   │   ├── member.py           # Member model
-│   │   ├── transaction.py       # Transaction model
-│   │   └── fine.py             # Fine model
-│   ├── schemas/
-│   │   ├── __init__.py
-│   │   ├── book.py             # Book schemas
-│   │   ├── member.py           # Member schemas
-│   │   ├── transaction.py       # Transaction schemas
-│   │   └── fine.py             # Fine schemas
-│   ├── services/
-│   │   ├── __init__.py
-│   │   ├── book_service.py      # Book business logic
-│   │   ├── member_service.py    # Member business logic
-│   │   ├── transaction_service.py # Transaction and borrowing logic
-│   │   └── fine_service.py      # Fine calculation logic
-│   └── api/
-│       ├── __init__.py
-│       ├── books.py             # Book endpoints
-│       ├── members.py           # Member endpoints
-│       ├── transactions.py       # Transaction endpoints
-│       └── fines.py             # Fine endpoints
-├── requirements.txt
+│   └── main.py                 # FastAPI application with all models, schemas, and endpoints
+├── venv/                        # Virtual environment
+├── library.db                   # SQLite database (auto-generated on first run)
+├── requirements.txt             # Project dependencies
 ├── .gitignore
 └── README.md
 ```
@@ -67,7 +43,7 @@ cd library-management-api
 2. Create a virtual environment:
 ```bash
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+source venv/Scripts/activate  # On Windows Git Bash
 ```
 
 3. Install dependencies:
@@ -75,16 +51,20 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-4. Set up the database:
+4. Run the application:
 ```bash
-# Configure your PostgreSQL connection in config.py
-python -c "from app.database import init_db; init_db()"
+python -m uvicorn app.main:app --reload
 ```
 
-5. Run the application:
-```bash
-uvicorn app.main:app --reload
-```
+The API will start on `http://localhost:8000`
+
+The SQLite database (`library.db`) will be automatically created when you run the app for the first time.
+
+## API Documentation
+
+Once the app is running, you can access:
+- **Swagger UI**: http://localhost:8000/docs
+- **ReDoc**: http://localhost:8000/redoc
 
 ## API Endpoints
 
@@ -121,77 +101,116 @@ uvicorn app.main:app --reload
 5. **Suspension**: Members with 3+ concurrent overdue books are automatically suspended
 6. **Book Status**: A book cannot be borrowed if its status is not 'available'
 
-## Error Handling
+## Database Setup
 
-The API returns appropriate HTTP status codes and error messages:
-- `400 Bad Request` - Invalid input data
-- `404 Not Found` - Resource not found
-- `409 Conflict` - Business rule violation
-- `500 Internal Server Error` - Server error
+### SQLite (Recommended for Testing)
+No additional setup required! SQLite automatically creates `library.db` when you run the app.
 
-## Testing
+### PostgreSQL (Optional for Production)
+If you want to use PostgreSQL instead:
 
-Test the endpoints using Postman or curl:
-
+1. Install PostgreSQL
+2. Create database and user:
 ```bash
-# Create a book
-curl -X POST http://localhost:8000/books \
-  -H "Content-Type: application/json" \
-  -d '{"isbn": "978-0-123456-78-9", "title": "Sample Book", "author": "John Doe", "category": "Fiction", "total_copies": 5}'
-
-# Create a member
-curl -X POST http://localhost:8000/members \
-  -H "Content-Type: application/json" \
-  -d '{"name": "Jane Smith", "email": "jane@example.com"}'
-
-# Borrow a book
-curl -X POST http://localhost:8000/transactions/borrow \
-  -H "Content-Type: application/json" \
-  -d '{"book_id": 1, "member_id": 1}'
+psql -U postgres
+CREATE DATABASE library_db;
+CREATE USER library_user WITH PASSWORD 'your_password';
+ALTER ROLE library_user SET client_encoding TO 'utf8';
+ALTER ROLE library_user SET default_transaction_isolation TO 'read committed';
+GRANT ALL PRIVILEGES ON DATABASE library_db TO library_user;
+\q
 ```
+
+3. Update `app/main.py` line 16:
+```python
+DATABASE_URL = "postgresql://library_user:your_password@localhost:5432/library_db"
+```
+
+## Testing with Swagger UI
+
+1. Open http://localhost:8000/docs
+2. Try the endpoints:
+
+**Create a Book:**
+```json
+{
+  "isbn": "978-0-123456-78-9",
+  "title": "Python Basics",
+  "author": "John Doe",
+  "category": "Programming",
+  "total_copies": 5
+}
+```
+
+**Create a Member:**
+```json
+{
+  "name": "Jane Smith",
+  "email": "jane@example.com"
+}
+```
+
+**Borrow a Book:**
+```json
+{
+  "book_id": 1,
+  "member_id": 1
+}
+```
+
+## Testing Business Rules
+
+1. **Max 3 Books**: Try borrowing 4 books from same member → should get error
+2. **Book Availability**: Try borrowing book with 0 copies → should get error
+3. **Unpaid Fines**: Create fine, don't pay, try to borrow → should get error
+4. **Overdue Calculation**: Return book 5 days late → should create $2.50 fine
 
 ## Database Schema
 
 ### Books Table
-- id (PK)
-- isbn (UNIQUE)
+- id (Primary Key)
+- isbn (Unique)
 - title
 - author
 - category
 - status (available, borrowed, reserved, maintenance)
 - total_copies
 - available_copies
-- created_at
-- updated_at
+- created_at, updated_at
 
 ### Members Table
-- id (PK)
+- id (Primary Key)
 - name
-- email
-- membership_number (UNIQUE)
+- email (Unique)
+- membership_number (Unique)
 - status (active, suspended)
-- created_at
-- updated_at
+- created_at, updated_at
 
 ### Transactions Table
-- id (PK)
-- book_id (FK)
-- member_id (FK)
+- id (Primary Key)
+- book_id (Foreign Key → Books)
+- member_id (Foreign Key → Members)
 - borrowed_at
 - due_date
-- returned_at (nullable)
+- returned_at (Nullable)
 - status (active, returned, overdue)
-- created_at
-- updated_at
+- created_at, updated_at
 
 ### Fines Table
-- id (PK)
-- member_id (FK)
-- transaction_id (FK)
+- id (Primary Key)
+- member_id (Foreign Key → Members)
+- transaction_id (Foreign Key → Transactions)
 - amount
-- paid_at (nullable)
-- created_at
-- updated_at
+- paid_at (Nullable)
+- created_at, updated_at
+
+## Error Handling
+
+The API returns appropriate HTTP status codes:
+- `400 Bad Request` - Invalid input data
+- `404 Not Found` - Resource not found
+- `409 Conflict` - Business rule violation
+- `500 Internal Server Error` - Server error
 
 ## License
 
