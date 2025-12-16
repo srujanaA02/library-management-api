@@ -13,8 +13,13 @@ from typing import List, Optional
 import enum
 
 # Database Configuration
-DATABASE_URL = "postgresql://user:password@localhost/library_db"
-engine = create_engine(DATABASE_URL)
+# NEW CODE - PASTE THIS:
+DATABASE_URL = "sqlite:///./library.db"
+engine = create_engine(
+    DATABASE_URL, 
+    connect_args={"check_same_thread": False}
+)
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
@@ -139,12 +144,16 @@ class FineResponse(BaseModel):
 # FastAPI App
 app = FastAPI(title="Library Management API", version="1.0.0")
 
+# Create database tables on startup
+Base.metadata.create_all(bind=engine)
+
 def get_db():
     db = SessionLocal()
     try:
         yield db
     finally:
         db.close()
+
 
 # Book Endpoints
 @app.post("/books", response_model=BookResponse)
